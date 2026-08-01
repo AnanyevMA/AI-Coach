@@ -1,0 +1,566 @@
+{
+  "$schema": "https://ai-adaptive-coach.ru/schemas/agents-config/v2.0.json",
+  "_comment": "agents_config.json — Полная конфигурация роевой системы агентов. Читается orchestrator.py. Обновляется при изменении структуры агентов.",
+  "_version": "2.0.0",
+  "_updated": "2026-08-01",
+  "_phase": "ЭТАП 2 рефакторинга: 3-слойная иерархическая матричная архитектура",
+
+  "orchestration": {
+    "engine": "orchestrator/orchestrator.py",
+    "routing_rules": "orchestrator/routing_rules.yaml",
+    "blackboard": {
+      "adapter": "filesystem",
+      "adapter_class": "orchestrator.blackboard_adapter.FileSystemAdapter",
+      "tasks_path": "blackboard/tasks",
+      "interrupts_path": "blackboard/interrupts",
+      "archive_path": "blackboard/archive",
+      "index_file": "blackboard/index.json",
+      "future_adapters": ["RedisAdapter", "PostgreSQLAdapter"]
+    },
+    "micro_communication": {
+      "lead_worker_direct_calls": true,
+      "record_micro_to_blackboard": false,
+      "record_final_outcomes_only": true,
+      "rationale": "Saves tokens; only terminal states written to Blackboard"
+    },
+    "task_id_format": "TASK-{YYYYMMDD}-{SEQ:04d}",
+    "interrupt_id_format": "INTERRUPT_REQ_{task_id}.json"
+  },
+
+  "arbitration": {
+    "priority_order": [
+      "security_policy_keeper",
+      "legal_compliance_policy_keeper",
+      "finance_budget_policy_keeper",
+      "product_ux_policy_keeper"
+    ],
+    "rules": {
+      "p1_reject": "IMMEDIATE_BLOCK — task → BLOCKED, no further arbitration",
+      "p2_reject": "FEATURE_BLOCK — task → BLOCKED, Human Override required",
+      "p3_reject": "SCOPE_REDUCE — reduce task scope to fit budget, re-route to Team Lead",
+      "p4_reject": "ADAPT_REQUEST — Team Lead proposes UX alternative within 1 attempt"
+    }
+  },
+
+  "cold_start_protocol": {
+    "mode": "PASS_THROUGH_WITH_WARNING",
+    "condition": "policy_store_empty OR first_task_for_agent",
+    "action": "pass_task + generate_draft_rules_from_context",
+    "blackboard_log_level": "WARNING"
+  },
+
+  "circuit_breaker": {
+    "worker_max_attempts": 3,
+    "team_lead_max_reconfig_attempts": 2,
+    "escalation_sla_hours": 24,
+    "trigger": "attempts_exhausted OR p1_hard_block OR sla_breach"
+  },
+
+  "agents": {
+
+    "core": [
+      {
+        "id": "orchestrator_engine",
+        "role": "Deterministic Orchestration State Machine",
+        "entrypoint": "orchestrator/orchestrator.py:OrchestratorEngine",
+        "always_active": true,
+        "permissions": {
+          "blackboard_read": ["ALL"],
+          "blackboard_write": ["status", "status_history", "layer_routing", "arbitration"],
+          "can_block_task": false,
+          "can_trigger_escalation": true,
+          "can_approve_gate": []
+        },
+        "triggers": ["blackboard_poll_interval_seconds: 10", "on_task_created", "on_status_changed"]
+      },
+      {
+        "id": "blackboard_manager",
+        "role": "Task Artifact Manager & Blackboard Index",
+        "entrypoint": "orchestrator/blackboard_adapter.py:FileSystemAdapter",
+        "always_active": true,
+        "permissions": {
+          "blackboard_read": ["ALL"],
+          "blackboard_write": ["ALL"],
+          "can_block_task": false,
+          "can_trigger_escalation": false,
+          "can_approve_gate": []
+        },
+        "triggers": ["on_task_write_request", "on_index_update_request"]
+      },
+      {
+        "id": "human_escalation_handler",
+        "role": "Human-in-the-Loop Interface & Circuit Breaker",
+        "always_active": false,
+        "permissions": {
+          "blackboard_read": ["BLOCKED", "IN_PROGRESS"],
+          "blackboard_write": ["human_escalation", "status"],
+          "can_block_task": false,
+          "can_trigger_escalation": true,
+          "can_approve_gate": []
+        },
+        "triggers": ["on_circuit_breaker_trip", "on_p1_hard_block", "on_sla_breach"]
+      }
+    ],
+
+    "layer_1_policy": [
+      {
+        "id": "security_policy_keeper",
+        "layer": 1,
+        "priority": 1,
+        "role": "Security & Data Privacy Policy Keeper",
+        "merged_from": ["cybersecurity_penetration_tester", "data_privacy_dpo"],
+        "permissions": {
+          "blackboard_read": ["BACKLOG", "ENRICHING", "CODE_REVIEW", "COMPLIANCE_REVIEW"],
+          "blackboard_write": ["policy_gates.security", "arbitration"],
+          "can_block_task": true,
+          "can_trigger_escalation": true,
+          "can_approve_gate": ["security"],
+          "file_access": {
+            "read": ["app/core/security.py", "app/core/config.py", "app/core/rate_limiter.py", "app/**/*.py"],
+            "write": ["docs/security/"]
+          }
+        },
+        "triggers": ["on_task_enters_ENRICHING", "on_task_enters_COMPLIANCE_REVIEW"],
+        "cold_start": "PASS_THROUGH_WITH_WARNING"
+      },
+      {
+        "id": "legal_compliance_policy_keeper",
+        "layer": 1,
+        "priority": 2,
+        "role": "Legal & Regulatory Compliance Policy Keeper",
+        "merged_from": ["legal_compliance_counsel", "ru_compliance_counsel", "ip_trademark_counsel"],
+        "permissions": {
+          "blackboard_read": ["BACKLOG", "ENRICHING", "COMPLIANCE_REVIEW"],
+          "blackboard_write": ["policy_gates.legal", "arbitration"],
+          "can_block_task": true,
+          "can_trigger_escalation": true,
+          "can_approve_gate": ["legal"],
+          "file_access": {
+            "read": ["app/**/*.py", "docs/legal/"],
+            "write": ["docs/legal/"]
+          }
+        },
+        "triggers": ["on_task_enters_ENRICHING", "on_task_enters_COMPLIANCE_REVIEW"],
+        "cold_start": "PASS_THROUGH_WITH_WARNING"
+      },
+      {
+        "id": "finance_budget_policy_keeper",
+        "layer": 1,
+        "priority": 3,
+        "role": "Finance & Infrastructure Budget Policy Keeper",
+        "merged_from": ["cfo_financial_strategist", "cloud_finops_cost_engineer"],
+        "permissions": {
+          "blackboard_read": ["BACKLOG", "ENRICHING"],
+          "blackboard_write": ["policy_gates.finance", "arbitration"],
+          "can_block_task": false,
+          "can_scope_reduce": true,
+          "can_trigger_escalation": true,
+          "can_approve_gate": ["finance"],
+          "file_access": {
+            "read": ["docs/economics/", "deploy/"],
+            "write": ["docs/economics/"]
+          }
+        },
+        "triggers": ["on_task_enters_ENRICHING", "on_infra_cost_threshold_exceeded"],
+        "cold_start": "PASS_THROUGH_WITH_WARNING"
+      },
+      {
+        "id": "product_ux_policy_keeper",
+        "layer": 1,
+        "priority": 4,
+        "role": "Product Vision & UX Standards Policy Keeper",
+        "merged_from": ["growth_product_lead", "product_saas_architect"],
+        "permissions": {
+          "blackboard_read": ["BACKLOG", "ENRICHING", "READY_FOR_DEV"],
+          "blackboard_write": ["policy_gates.product", "arbitration"],
+          "can_block_task": false,
+          "can_adapt_request": true,
+          "can_trigger_escalation": false,
+          "can_approve_gate": ["product"],
+          "file_access": {
+            "read": ["docs/product/", "frontend/", "docs/growth/"],
+            "write": ["docs/product/", "docs/growth/"]
+          }
+        },
+        "triggers": ["on_task_enters_ENRICHING"],
+        "cold_start": "PASS_THROUGH_WITH_WARNING"
+      }
+    ],
+
+    "layer_2_management": [
+      {
+        "id": "engineering_lead",
+        "layer": 2,
+        "role": "Engineering Team Lead",
+        "domain": "Engineering",
+        "promoted_from": "engineering_lead (As-Is — role clarified)",
+        "permissions": {
+          "blackboard_read": ["READY_FOR_DEV", "IN_PROGRESS", "CODE_REVIEW"],
+          "blackboard_write": ["layer_routing.assigned_worker", "execution.reconfig"],
+          "can_block_task": false,
+          "can_reconfig_task": true,
+          "max_reconfig_attempts": 2,
+          "can_trigger_escalation": true,
+          "file_access": {
+            "read": ["app/", "tests/", "deploy/", "requirements.txt"],
+            "write": ["app/", "tests/"]
+          }
+        },
+        "manages_workers": [
+          "sports_ai_engineer", "backend_integrator", "analytics_data_engineer",
+          "qa_safety_auditor", "devops_infra", "mobile_native_engineer",
+          "wearable_iot_hardware_specialist", "platform_db_dba_expert",
+          "observability_sre_monitoring", "cicd_automation_engineer", "ui_ux_design_system"
+        ],
+        "triggers": ["on_task_READY_FOR_DEV:domain=engineering", "on_worker_self_fix_exhausted"]
+      },
+      {
+        "id": "medical_team_lead",
+        "layer": 2,
+        "role": "Medical & Sports Science Team Lead",
+        "domain": "Medical",
+        "promoted_from": "sports_medicine_physician (As-Is Lead → Layer 2 Lead)",
+        "permissions": {
+          "blackboard_read": ["READY_FOR_DEV", "IN_PROGRESS", "CODE_REVIEW"],
+          "blackboard_write": ["layer_routing.assigned_worker", "execution.reconfig"],
+          "can_block_task": false,
+          "can_reconfig_task": true,
+          "max_reconfig_attempts": 2,
+          "can_trigger_escalation": true,
+          "file_access": {
+            "read": ["docs/medical/", "app/services/red_flag_service.py"],
+            "write": ["docs/medical/"]
+          }
+        },
+        "manages_workers": [
+          "sports_medicine_physician", "sports_science_researcher",
+          "biomechanics_physiologist", "sports_nutritionist_dietitian", "sports_psychologist_mindset"
+        ],
+        "triggers": ["on_task_READY_FOR_DEV:domain=medical"]
+      },
+      {
+        "id": "growth_team_lead",
+        "layer": 2,
+        "role": "Growth & Sales Team Lead",
+        "domain": "Growth",
+        "promoted_from": "growth_product_lead (strategy → product_ux_policy_keeper; GTM ops → here)",
+        "permissions": {
+          "blackboard_read": ["READY_FOR_DEV", "IN_PROGRESS", "CODE_REVIEW"],
+          "blackboard_write": ["layer_routing.assigned_worker", "execution.reconfig"],
+          "can_block_task": false,
+          "can_reconfig_task": true,
+          "max_reconfig_attempts": 2,
+          "file_access": {
+            "read": ["docs/growth/", "docs/product/"],
+            "write": ["docs/growth/"]
+          }
+        },
+        "manages_workers": [
+          "growth_marketer", "content_copywriter", "b2b_enterprise_sales_lead", "market_user_researcher"
+        ],
+        "triggers": ["on_task_READY_FOR_DEV:domain=growth"]
+      },
+      {
+        "id": "research_team_lead",
+        "layer": 2,
+        "role": "Research & Product Discovery Team Lead",
+        "domain": "Research",
+        "promoted_from": "research_swarm_lead (unchanged)",
+        "permissions": {
+          "blackboard_read": ["READY_FOR_DEV", "IN_PROGRESS", "CODE_REVIEW"],
+          "blackboard_write": ["layer_routing.assigned_worker", "execution.reconfig"],
+          "can_block_task": false,
+          "can_reconfig_task": true,
+          "max_reconfig_attempts": 2,
+          "file_access": {
+            "read": ["docs/product/", "docs/medical/", "docs/legal/"],
+            "write": ["docs/product/"]
+          }
+        },
+        "manages_workers": ["market_user_researcher", "coach_experience_advocate"],
+        "triggers": ["on_task_READY_FOR_DEV:domain=research"]
+      },
+      {
+        "id": "economics_team_lead",
+        "layer": 2,
+        "role": "Economics & Pricing Team Lead",
+        "domain": "Economics",
+        "promoted_from": "cfo_financial_strategist (ops role; policy role → finance_budget_policy_keeper)",
+        "permissions": {
+          "blackboard_read": ["READY_FOR_DEV", "IN_PROGRESS", "CODE_REVIEW"],
+          "blackboard_write": ["layer_routing.assigned_worker", "execution.reconfig"],
+          "can_block_task": false,
+          "can_reconfig_task": true,
+          "max_reconfig_attempts": 2,
+          "file_access": {
+            "read": ["docs/economics/"],
+            "write": ["docs/economics/"]
+          }
+        },
+        "manages_workers": [
+          "ru_tax_accounting_specialist", "saas_pricing_monetization_expert", "unit_economics_analyst"
+        ],
+        "triggers": ["on_task_READY_FOR_DEV:domain=economics"]
+      },
+      {
+        "id": "legal_ops_team_lead",
+        "layer": 2,
+        "role": "Legal Operations Team Lead",
+        "domain": "Legal",
+        "promoted_from": "ru_compliance_counsel (ops role; policy role → legal_compliance_policy_keeper)",
+        "permissions": {
+          "blackboard_read": ["READY_FOR_DEV", "IN_PROGRESS", "CODE_REVIEW"],
+          "blackboard_write": ["layer_routing.assigned_worker", "execution.reconfig"],
+          "can_block_task": false,
+          "can_reconfig_task": true,
+          "max_reconfig_attempts": 2,
+          "file_access": {
+            "read": ["docs/legal/"],
+            "write": ["docs/legal/"]
+          }
+        },
+        "manages_workers": ["ru_compliance_counsel", "data_privacy_dpo"],
+        "triggers": ["on_task_READY_FOR_DEV:domain=legal"]
+      }
+    ],
+
+    "layer_3_execution": [
+      {
+        "id": "sports_ai_engineer", "layer": 3, "domain": "engineering",
+        "role": "Sports AI Prompt Engineer & Gemini Integration",
+        "permissions": {
+          "blackboard_read": ["IN_PROGRESS"],
+          "blackboard_write": ["execution"],
+          "can_block_task": false,
+          "can_trigger_escalation": false,
+          "max_self_fix_attempts": 3,
+          "file_access": {"read": ["app/services/ai_coach_engine.py", "app/services/"], "write": ["app/services/ai_coach_engine.py"]}
+        },
+        "triggers": ["on_assigned_by_engineering_lead:task_type=ai_model"]
+      },
+      {
+        "id": "backend_integrator", "layer": 3, "domain": "engineering",
+        "role": "Async FastAPI Backend Developer",
+        "permissions": {
+          "blackboard_read": ["IN_PROGRESS"],
+          "blackboard_write": ["execution"],
+          "can_block_task": false,
+          "can_trigger_escalation": false,
+          "max_self_fix_attempts": 3,
+          "file_access": {"read": ["app/"], "write": ["app/api/", "app/services/", "app/models/"]}
+        },
+        "triggers": ["on_assigned_by_engineering_lead:task_type=backend"]
+      },
+      {
+        "id": "analytics_data_engineer", "layer": 3, "domain": "engineering",
+        "role": "Telemetry & FIT Data Engineer",
+        "permissions": {
+          "blackboard_read": ["IN_PROGRESS"],
+          "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["app/services/telemetry_analysis_service.py"], "write": ["app/services/telemetry_analysis_service.py"]}
+        },
+        "triggers": ["on_assigned_by_engineering_lead:task_type=telemetry"]
+      },
+      {
+        "id": "qa_safety_auditor", "layer": 3, "domain": "engineering",
+        "role": "QA & Safety Auditor",
+        "permissions": {
+          "blackboard_read": ["IN_PROGRESS", "CODE_REVIEW"],
+          "blackboard_write": ["execution.test_results"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["tests/", "app/"], "write": ["tests/"]}
+        },
+        "triggers": ["on_task_enters_CODE_REVIEW"]
+      },
+      {
+        "id": "devops_infra", "layer": 3, "domain": "engineering",
+        "role": "SRE & DevOps Engineer",
+        "permissions": {
+          "blackboard_read": ["IN_PROGRESS"],
+          "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["deploy/", "docker-compose.yml", "Dockerfile"], "write": ["deploy/"]}
+        },
+        "triggers": ["on_assigned_by_engineering_lead:task_type=infrastructure"]
+      },
+      {
+        "id": "mobile_native_engineer", "layer": 3, "domain": "engineering",
+        "role": "Mobile Native Engineer (Flutter/React Native)",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["frontend/"], "write": ["frontend/"]}},
+        "triggers": ["on_assigned_by_engineering_lead:task_type=mobile"]
+      },
+      {
+        "id": "wearable_iot_hardware_specialist", "layer": 3, "domain": "engineering",
+        "role": "Wearable & IoT Hardware Specialist",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["app/services/", "frontend/pwa_athlete/"], "write": ["app/services/"]}},
+        "triggers": ["on_assigned_by_engineering_lead:task_type=wearable"]
+      },
+      {
+        "id": "platform_db_dba_expert", "layer": 3, "domain": "engineering",
+        "role": "Database Administrator & Storage Engineer",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["app/models/", "alembic/"], "write": ["app/models/", "alembic/"]}},
+        "triggers": ["on_assigned_by_engineering_lead:task_type=database"]
+      },
+      {
+        "id": "observability_sre_monitoring", "layer": 3, "domain": "engineering",
+        "role": "Observability, SRE & Monitoring Engineer",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["deploy/prometheus.yml", "deploy/grafana_dashboard.json"], "write": ["deploy/"]}},
+        "triggers": ["on_assigned_by_engineering_lead:task_type=observability"]
+      },
+      {
+        "id": "cicd_automation_engineer", "layer": 3, "domain": "engineering",
+        "role": "CI/CD & Release Pipeline Specialist",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": [".github/", "scripts/"], "write": [".github/", "scripts/"]}},
+        "triggers": ["on_assigned_by_engineering_lead:task_type=cicd"]
+      },
+      {
+        "id": "ui_ux_design_system", "layer": 3, "domain": "engineering",
+        "role": "UI/UX Designer & Design System",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["frontend/"], "write": ["frontend/"]}},
+        "triggers": ["on_assigned_by_engineering_lead:task_type=ui_ux"]
+      },
+      {
+        "id": "sports_medicine_physician", "layer": 3, "domain": "medical",
+        "role": "Sports Medicine Physician (Red Flag Engine)",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/medical/", "app/services/red_flag_service.py"], "write": ["docs/medical/"]}},
+        "triggers": ["on_assigned_by_medical_lead:task_type=medical_protocol"]
+      },
+      {
+        "id": "sports_science_researcher", "layer": 3, "domain": "medical",
+        "role": "Sports Evidence Researcher (HRV/ACWR PubMed)",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/medical/"], "write": ["docs/medical/"]}},
+        "triggers": ["on_assigned_by_medical_lead:task_type=research"]
+      },
+      {
+        "id": "biomechanics_physiologist", "layer": 3, "domain": "medical",
+        "role": "Biomechanics Physiologist",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/medical/"], "write": ["docs/medical/"]}},
+        "triggers": ["on_assigned_by_medical_lead:task_type=biomechanics"]
+      },
+      {
+        "id": "sports_nutritionist_dietitian", "layer": 3, "domain": "medical",
+        "role": "Sports Nutritionist & Dietitian",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/medical/"], "write": ["docs/medical/"]}},
+        "triggers": ["on_assigned_by_medical_lead:task_type=nutrition"]
+      },
+      {
+        "id": "sports_psychologist_mindset", "layer": 3, "domain": "medical",
+        "role": "Sports Psychologist & Mindset Coach",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/medical/"], "write": ["docs/medical/"]}},
+        "triggers": ["on_assigned_by_medical_lead:task_type=psychology"]
+      },
+      {
+        "id": "growth_marketer", "layer": 3, "domain": "growth",
+        "role": "Growth & Community Manager",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/growth/"], "write": ["docs/growth/"]}},
+        "triggers": ["on_assigned_by_growth_lead:task_type=marketing"]
+      },
+      {
+        "id": "content_copywriter", "layer": 3, "domain": "growth",
+        "role": "Technical UX Copywriter",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["frontend/", "docs/"], "write": ["docs/growth/"]}},
+        "triggers": ["on_assigned_by_growth_lead:task_type=content"]
+      },
+      {
+        "id": "b2b_enterprise_sales_lead", "layer": 3, "domain": "growth",
+        "role": "B2B Enterprise Sales Worker",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/growth/", "docs/product/"], "write": ["docs/growth/"]}},
+        "triggers": ["on_assigned_by_growth_lead:task_type=b2b_sales"]
+      },
+      {
+        "id": "market_user_researcher", "layer": 3, "domain": "research",
+        "role": "Athlete & Market Researcher",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/product/"], "write": ["docs/product/"]}},
+        "triggers": ["on_assigned_by_research_lead:task_type=research"]
+      },
+      {
+        "id": "coach_experience_advocate", "layer": 3, "domain": "research",
+        "role": "B2B Coach Experience Advocate",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/product/"], "write": ["docs/product/"]}},
+        "triggers": ["on_assigned_by_research_lead:task_type=coach_ux"]
+      },
+      {
+        "id": "ru_tax_accounting_specialist", "layer": 3, "domain": "economics",
+        "role": "Russian Tax & Accounting Specialist",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/economics/", "docs/legal/"], "write": ["docs/economics/"]}},
+        "triggers": ["on_assigned_by_economics_lead:task_type=tax"]
+      },
+      {
+        "id": "saas_pricing_monetization_expert", "layer": 3, "domain": "economics",
+        "role": "SaaS Pricing & Monetization Expert",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/economics/"], "write": ["docs/economics/"]}},
+        "triggers": ["on_assigned_by_economics_lead:task_type=pricing"]
+      },
+      {
+        "id": "unit_economics_analyst", "layer": 3, "domain": "economics",
+        "role": "Unit Economics Analyst (LTV/CAC)",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/economics/"], "write": ["docs/economics/"]}},
+        "triggers": ["on_assigned_by_economics_lead:task_type=unit_economics"]
+      },
+      {
+        "id": "ru_compliance_counsel", "layer": 3, "domain": "legal",
+        "role": "Russian Compliance Counsel (operational)",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/legal/"], "write": ["docs/legal/"]}},
+        "triggers": ["on_assigned_by_legal_ops_lead:task_type=rf_compliance"]
+      },
+      {
+        "id": "data_privacy_dpo", "layer": 3, "domain": "legal",
+        "role": "Data Protection Officer (operational)",
+        "permissions": {"blackboard_read": ["IN_PROGRESS"], "blackboard_write": ["execution"],
+          "can_block_task": false, "max_self_fix_attempts": 3,
+          "file_access": {"read": ["docs/legal/", "app/core/security.py"], "write": ["docs/legal/"]}},
+        "triggers": ["on_assigned_by_legal_ops_lead:task_type=data_privacy"]
+      }
+    ]
+  },
+
+  "summary": {
+    "total_agents": 38,
+    "core": 3,
+    "layer_1_policy": 4,
+    "layer_2_management": 6,
+    "layer_3_execution": 25,
+    "deprecated_removed": ["product_saas_architect", "ip_trademark_counsel", "cloud_finops_cost_engineer"]
+  }
+}

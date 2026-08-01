@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Adaptive Coach v7.0 — B2B Web Кабинет Тренера</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        },
+                        dark: {
+                            base: '#0B0E14',
+                            surface: '#141824',
+                            card: '#1C2234',
+                            border: 'rgba(255, 255, 255, 0.08)'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #0B0E14; color: #E2E8F0; font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <header class="mb-6 flex justify-between items-center border-b border-dark-border pb-4">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-user-ninja text-2xl text-brand-500"></i>
+            <div>
+                <h1 class="text-xl font-bold text-white">B2B Coach Dashboard — Group Heatmap Matrix</h1>
+                <p class="text-xs text-gray-400">AI Adaptive Coach v7.0 • Squad Monitoring</p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
+                ● 5 Active Athletes Synced
+            </span>
+        </div>
+    </header>
+
+    <main class="space-y-6">
+        <section class="bg-dark-surface p-4 rounded-xl border border-dark-border">
+            <h2 class="text-sm font-bold text-white mb-3">Group Heatmap Matrix</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-gray-300">
+                    <thead class="bg-dark-card text-gray-400 uppercase text-[10px]">
+                        <tr>
+                            <th class="p-3">Спортсмен</th>
+                            <th class="p-3">Спорт</th>
+                            <th class="p-3">Readiness (Ri)</th>
+                            <th class="p-3">ACWR Load</th>
+                            <th class="p-3">TSB</th>
+                            <th class="p-3">Статус Риска</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-border">
+                        <tr class="hover:bg-dark-card/50">
+                            <td class="p-3 font-semibold text-white">Алексей Петров</td>
+                            <td class="p-3">Марафон</td>
+                            <td class="p-3 text-emerald-400 font-bold">88 / 100</td>
+                            <td class="p-3">1.12</td>
+                            <td class="p-3">-8</td>
+                            <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">Оптимально</span></td>
+                        </tr>
+                        <tr class="hover:bg-dark-card/50">
+                            <td class="p-3 font-semibold text-white">Елена Сидорова</td>
+                            <td class="p-3">Hyrox / S&C</td>
+                            <td class="p-3 text-amber-400 font-bold">64 / 100</td>
+                            <td class="p-3">1.35</td>
+                            <td class="p-3">-24</td>
+                            <td class="p-3"><span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">Усталость (HRV Drop)</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

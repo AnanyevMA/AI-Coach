@@ -1,0 +1,223 @@
+# routing_rules.yaml — AI Adaptive Coach v7.0 | Task Routing Configuration
+# Version: 2.0.0
+# Reads: orchestrator.py
+# Purpose: Human-editable routing rules. Change routing WITHOUT touching Python code.
+#
+# Format:
+#   task_types:                    # list of known task types
+#     <task_type>:
+#       domain: <domain>           # which Team Lead handles this
+#       policy_gates: [...]        # which Policy Keepers must review
+#       default_worker: <agent_id> # suggested worker (Team Lead can override)
+#       timeout_hours: N           # SLA for this task type
+
+task_types:
+
+  # ── Engineering Domain ──────────────────────────────────────────────────
+  ai_model:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper        # API key safety, rate limiting
+      - legal_compliance_policy_keeper # 323-ФЗ (not telemedicine)
+      - finance_budget_policy_keeper   # Gemini API cost
+    default_worker: sports_ai_engineer
+    timeout_hours: 48
+
+  backend:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper
+      - legal_compliance_policy_keeper
+    default_worker: backend_integrator
+    timeout_hours: 72
+
+  telemetry:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper        # PII in FIT data
+      - legal_compliance_policy_keeper # 152-ФЗ
+    default_worker: analytics_data_engineer
+    timeout_hours: 48
+
+  database:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper
+      - legal_compliance_policy_keeper
+    default_worker: platform_db_dba_expert
+    timeout_hours: 48
+
+  infrastructure:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper
+      - finance_budget_policy_keeper  # cloud costs
+    default_worker: devops_infra
+    timeout_hours: 24
+
+  mobile:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper
+      - product_ux_policy_keeper
+    default_worker: mobile_native_engineer
+    timeout_hours: 96
+
+  wearable:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper        # BLE data privacy
+      - legal_compliance_policy_keeper
+    default_worker: wearable_iot_hardware_specialist
+    timeout_hours: 72
+
+  ui_ux:
+    domain: engineering
+    policy_gates:
+      - product_ux_policy_keeper      # WCAG, mobile-first, dark patterns
+    default_worker: ui_ux_design_system
+    timeout_hours: 48
+
+  cicd:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper        # secrets in CI env
+    default_worker: cicd_automation_engineer
+    timeout_hours: 24
+
+  observability:
+    domain: engineering
+    policy_gates:
+      - security_policy_keeper        # PII in logs
+    default_worker: observability_sre_monitoring
+    timeout_hours: 24
+
+  qa:
+    domain: engineering
+    policy_gates: []                  # QA is itself a compliance step
+    default_worker: qa_safety_auditor
+    timeout_hours: 24
+
+  # ── Medical Domain ───────────────────────────────────────────────────────
+  medical_protocol:
+    domain: medical
+    policy_gates:
+      - security_policy_keeper        # medical data encryption
+      - legal_compliance_policy_keeper # 323-ФЗ
+    default_worker: sports_medicine_physician
+    timeout_hours: 48
+
+  biomechanics:
+    domain: medical
+    policy_gates:
+      - legal_compliance_policy_keeper
+    default_worker: biomechanics_physiologist
+    timeout_hours: 48
+
+  nutrition:
+    domain: medical
+    policy_gates:
+      - legal_compliance_policy_keeper # 38-ФЗ (supplements)
+    default_worker: sports_nutritionist_dietitian
+    timeout_hours: 48
+
+  psychology:
+    domain: medical
+    policy_gates:
+      - legal_compliance_policy_keeper # 323-ФЗ
+    default_worker: sports_psychologist_mindset
+    timeout_hours: 48
+
+  research:
+    domain: research
+    policy_gates: []
+    default_worker: sports_science_researcher
+    timeout_hours: 72
+
+  # ── Growth Domain ─────────────────────────────────────────────────────────
+  marketing:
+    domain: growth
+    policy_gates:
+      - legal_compliance_policy_keeper # 38-ФЗ (advertising)
+      - product_ux_policy_keeper       # no dark patterns
+    default_worker: growth_marketer
+    timeout_hours: 48
+
+  content:
+    domain: growth
+    policy_gates:
+      - legal_compliance_policy_keeper # 323-ФЗ disclaimers
+      - product_ux_policy_keeper
+    default_worker: content_copywriter
+    timeout_hours: 24
+
+  b2b_sales:
+    domain: growth
+    policy_gates:
+      - legal_compliance_policy_keeper
+      - finance_budget_policy_keeper
+    default_worker: b2b_enterprise_sales_lead
+    timeout_hours: 72
+
+  coach_ux:
+    domain: research
+    policy_gates:
+      - product_ux_policy_keeper
+    default_worker: coach_experience_advocate
+    timeout_hours: 48
+
+  # ── Economics Domain ─────────────────────────────────────────────────────
+  pricing:
+    domain: economics
+    policy_gates:
+      - legal_compliance_policy_keeper # 54-ФЗ
+      - finance_budget_policy_keeper
+    default_worker: saas_pricing_monetization_expert
+    timeout_hours: 48
+
+  tax:
+    domain: economics
+    policy_gates:
+      - legal_compliance_policy_keeper
+    default_worker: ru_tax_accounting_specialist
+    timeout_hours: 48
+
+  unit_economics:
+    domain: economics
+    policy_gates:
+      - finance_budget_policy_keeper
+    default_worker: unit_economics_analyst
+    timeout_hours: 48
+
+  # ── Legal Domain ──────────────────────────────────────────────────────────
+  rf_compliance:
+    domain: legal
+    policy_gates:
+      - legal_compliance_policy_keeper
+      - security_policy_keeper
+    default_worker: ru_compliance_counsel
+    timeout_hours: 72
+
+  data_privacy:
+    domain: legal
+    policy_gates:
+      - security_policy_keeper
+      - legal_compliance_policy_keeper
+    default_worker: data_privacy_dpo
+    timeout_hours: 48
+
+
+# ── Domain → Team Lead Mapping ─────────────────────────────────────────────
+domain_leads:
+  engineering: engineering_lead
+  medical:     medical_team_lead
+  growth:      growth_team_lead
+  research:    research_team_lead
+  economics:   economics_team_lead
+  legal:       legal_ops_team_lead
+
+
+# ── Default Policy Gates for Unknown Task Types ────────────────────────────
+default_policy_gates:
+  - security_policy_keeper
+  - legal_compliance_policy_keeper

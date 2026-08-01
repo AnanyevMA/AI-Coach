@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL 16 - Primary Relational Database
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: ai_coach_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ai_coach_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_postgres_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_coach_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_coach_user} -d ${POSTGRES_DB:-ai_coach_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ai_coach_network
+
+  # ----------------------------------------------------------------------------
+  # Redis 7 - Cache, Session Store & Rate Limiter
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ai_coach_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-secure_redis_password_change_me} --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-secure_redis_password_change_me} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - ai_coach_network
+
+  # ----------------------------------------------------------------------------
+  # FastAPI Web Application Service
+  # ----------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_coach_web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-ai_coach_user}:${POSTGRES_PASSWORD:-secure_postgres_password_change_me}@db:5432/${POSTGRES_DB:-ai_coach_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-secure_redis_password_change_me}@redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - ai_coach_network
+
+  # ----------------------------------------------------------------------------
+  # Nginx Reverse Proxy & SSL Termination
+  # ----------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: ai_coach_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/nginx-health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+  # ----------------------------------------------------------------------------
+  # Telegram Bot v3 Worker Service
+  # ----------------------------------------------------------------------------
+  tg_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_coach_tg_bot
+    restart: unless-stopped
+    command: python app/telegram_bot/bot.py
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-ai_coach_user}:${POSTGRES_PASSWORD:-secure_postgres_password_change_me}@db:5432/${POSTGRES_DB:-ai_coach_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-secure_redis_password_change_me}@redis:6379/0
+    depends_on:
+      web:
+        condition: service_started
+    networks:
+      - ai_coach_network
+
+
+# ------------------------------------------------------------------------------
+# Persistent Named Volumes & Networks
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  ai_coach_network:
+    driver: bridge

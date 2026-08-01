@@ -1,0 +1,70 @@
+# ==============================================================================
+# AI Adaptive Coach v7.0 - Prometheus Telemetry Configuration
+# Target Infrastructure: Selectel / Yandex Cloud RF Data Centers
+# Scrapes metrics from FastAPI backend (/metrics), Nginx proxy, Postgres, and Redis
+# ==============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+  external_labels:
+    environment: 'production'
+    provider: 'selectel-yandex-cloud'
+    region: 'ru-central1'
+    app_name: 'ai-adaptive-coach-v7'
+
+# Alerting Rules Configuration (Optional integration with Alertmanager)
+rule_files:
+  # - "alert_rules.yml"
+
+scrape_configs:
+  # ----------------------------------------------------------------------------
+  # 1. FastAPI Async Backend Service Scraper (/metrics)
+  # ----------------------------------------------------------------------------
+  - job_name: 'ai_coach_backend'
+    metrics_path: '/metrics'
+    scheme: 'http'
+    scrape_interval: 10s
+    scrape_timeout: 8s
+    static_configs:
+      - targets: ['web:8000']
+        labels:
+          tier: 'backend'
+          service: 'fastapi'
+
+  # ----------------------------------------------------------------------------
+  # 2. Nginx Reverse Proxy Telemetry (Optional Nginx Exporter)
+  # ----------------------------------------------------------------------------
+  - job_name: 'nginx_proxy'
+    metrics_path: '/metrics'
+    scheme: 'http'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['nginx:80']
+        labels:
+          tier: 'proxy'
+          service: 'nginx'
+
+  # ----------------------------------------------------------------------------
+  # 3. PostgreSQL 16 Relational Database Exporter (Optional)
+  # ----------------------------------------------------------------------------
+  - job_name: 'postgres_db'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          tier: 'database'
+          service: 'postgresql'
+
+  # ----------------------------------------------------------------------------
+  # 4. Redis 7 Telemetry Exporter (Optional)
+  # ----------------------------------------------------------------------------
+  - job_name: 'redis_cache'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          tier: 'cache'
+          service: 'redis'

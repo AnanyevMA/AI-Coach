@@ -1,0 +1,304 @@
+{
+  "_comment": "governance_manifest.json — живой манифест проекта. Обновляется при каждом изменении структуры. Читается validate_governance.py для построения проверок.",
+  "_instructions": "Добавьте новый блок в нужную секцию при изменении проекта. Validator автоматически подхватит изменения без правки Python-кода.",
+
+  "project": {
+    "name": "AI Adaptive Coach",
+    "version": "7.0.0",
+    "current_phase": "Phase 4 + MAS Refactor",
+    "phase_status": "COMPLETE",
+    "mas_architecture_version": "2.0.0",
+    "description": "AI-powered adaptive sports coaching platform with 3-layer hierarchical MAS orchestration"
+  },
+
+  "thresholds": {
+    "min_test_count": 158,
+    "min_agent_state_bytes": 200,
+    "min_doc_bytes": 500,
+    "min_governance_file_bytes": 100,
+    "min_deploy_file_bytes": 500,
+    "pytest_timeout_seconds": 60
+  },
+
+  "governance_files": [
+    {
+      "path": ".agent_context/SWARM_STATE.md",
+      "description": "Матрица фаз, 3-слойная иерархия агентов, индекс файлов",
+      "required_keywords": ["Phase 4", "COMPLETED", "ORCHESTRATOR"]
+    },
+    {
+      "path": ".agent_context/ARCHITECTURE_DECISIONS.md",
+      "description": "Architecture Decision Records (ADR)",
+      "required_keywords": ["ADR 001"]
+    },
+    {
+      "path": ".agent_context/SWARM_GOVERNANCE_GUIDE.md",
+      "description": "Протоколы и чеклист изменений",
+      "required_keywords": ["Обязательный", "Scenario"]
+    },
+    {
+      "path": "README.md",
+      "description": "Главный документ проекта",
+      "required_keywords": ["v7.0", "146", "Phase 4"]
+    },
+    {
+      "path": "CHANGELOG.md",
+      "description": "Хронология изменений по версиям",
+      "required_keywords": ["7.0.0", "Phase 4"]
+    },
+    {
+      "path": "agents_config.json",
+      "description": "Полная конфигурация MAS (PoLP, триггеры, маршрутизация)",
+      "required_keywords": ["orchestration", "arbitration", "layer_1_policy"]
+    },
+    {
+      "path": ".agent_context/ARCHITECTURE_ONBOARDING_PLAYBOOK.md",
+      "description": "Главный операционный регламент (Onboarding, Arbitration, State Machine)",
+      "required_keywords": ["SOP", "Onboarding", "Circuit Breaker"]
+    }
+  ],
+
+  "deploy_artifacts": [
+    {
+      "path": "deploy/selectel_yandex_cloud_deploy.sh",
+      "description": "Скрипт деплоя на Selectel/Yandex Cloud",
+      "required_keywords": ["certbot", "alembic"]
+    },
+    {
+      "path": "deploy/nginx_production.conf",
+      "description": "Nginx TLS 1.3 продакшен конфиг",
+      "required_keywords": ["ssl_protocols", "TLSv1.3"]
+    },
+    {
+      "path": "deploy/prometheus.yml",
+      "description": "Prometheus scrape configuration",
+      "required_keywords": ["scrape_configs", "ai_coach_backend"]
+    },
+    {
+      "path": "deploy/grafana_dashboard.json",
+      "description": "Grafana dashboard JSON",
+      "required_keywords": ["panels", "datasource"]
+    }
+  ],
+
+  "source_files": [
+    {
+      "path": "app/main.py",
+      "description": "FastAPI точка входа",
+      "required_keywords": ["FastAPI", "/metrics"]
+    },
+    {
+      "path": "app/core/security.py",
+      "description": "AES-256-GCM шифрование (152-ФЗ)",
+      "required_keywords": ["AES256GCMCipher", "AESGCM"]
+    },
+    {
+      "path": "app/core/config.py",
+      "description": "Pydantic Settings + Gemini key masking",
+      "required_keywords": ["GEMINI_API_KEY", "get_masked_gemini_key"]
+    },
+    {
+      "path": "app/core/rate_limiter.py",
+      "description": "Rate Limiter (DDoS защита)",
+      "required_keywords": ["RateLimiter"]
+    },
+    {
+      "path": "app/services/red_flag_service.py",
+      "description": "RedFlagsTriageEngine (Level 0-3, 323-ФЗ)",
+      "required_keywords": ["LEVEL_1", "triage"]
+    },
+    {
+      "path": "app/services/ai_coach_engine.py",
+      "description": "Gemini 1.5 Flash AI engine + fallback",
+      "required_keywords": ["gemini", "fallback"]
+    },
+    {
+      "path": "app/services/telemetry_analysis_service.py",
+      "description": "Telemetry analysis (ACWR, HRV Z-score, NP, TSS)",
+      "required_keywords": ["acwr", "hrv"]
+    },
+    {
+      "path": "docker-compose.yml",
+      "description": "Docker Compose оркестрация",
+      "required_keywords": ["postgres", "redis"]
+    },
+    {
+      "path": "requirements.txt",
+      "description": "Python зависимости",
+      "required_keywords": ["fastapi", "sqlalchemy"]
+    },
+    {
+      "path": "orchestrator/orchestrator.py",
+      "description": "Deterministic Orchestration State Machine Engine",
+      "required_keywords": ["OrchestratorEngine", "StateMachine"]
+    },
+    {
+      "path": "orchestrator/blackboard_adapter.py",
+      "description": "Blackboard abstraction layer (FS/Redis/PG adapters)",
+      "required_keywords": ["BlackboardAdapter", "FileSystemAdapter"]
+    },
+    {
+      "path": "orchestrator/routing_rules.yaml",
+      "description": "Human-editable task routing config (no Python required)",
+      "required_keywords": ["task_types", "domain_leads"]
+    },
+    {
+      "path": "app/api/v1/endpoints/webhooks.py",
+      "description": "Garmin, Oura, Whoop direct telemetry webhooks",
+      "required_keywords": ["garmin", "oura", "whoop"]
+    },
+    {
+      "path": "app/services/on_device_slm_service.py",
+      "description": "On-Device Hybrid SLM (Small Language Model) context packaging",
+      "required_keywords": ["onnx", "webgpu"]
+    }
+  ],
+
+  "docs": {
+    "auto_discover": true,
+    "base_dir": "docs",
+    "explicit_required": [
+      {
+        "path": "docs/legal/152_fz_compliance.md",
+        "description": "152-ФЗ соответствие и локализация ПДн"
+      },
+      {
+        "path": "docs/legal/323_fz_medical_disclaimer.md",
+        "description": "323-ФЗ дисклеймеры (не-телемедицина)"
+      },
+      {
+        "path": "docs/medical/red_flags_triage_rules.md",
+        "description": "Правила триажа Red Flags"
+      },
+      {
+        "path": "docs/medical/hrv_recovery_evidence_review.md",
+        "description": "Доказательная база HRV/ACWR"
+      },
+      {
+        "path": "docs/economics/financial_model_pnl.md",
+        "description": "Финансовая модель P&L"
+      },
+      {
+        "path": "docs/economics/pricing_and_monetization_policy.md",
+        "description": "Политика цен и монетизации"
+      },
+      {
+        "path": "docs/growth/beta_test_recruitment_program.md",
+        "description": "Программа закрытого бета-теста"
+      },
+      {
+        "path": "docs/growth/marketing_launch_playbook.md",
+        "description": "GTM маркетинговый план"
+      },
+      {
+        "path": "docs/security/final_security_and_compliance_report.md",
+        "description": "Итоговый отчёт безопасности и соответствия"
+      },
+      {
+        "path": "docs/product/target_service_requirements_and_architecture_v7.md",
+        "description": "Целевая спецификация требований и архитектура сервиса v7.0"
+      },
+      {
+        "path": "docs/product/design_system_and_ux_guidelines_v7.md",
+        "description": "Дизайн-система и UX-регламенты v7.0"
+      },
+      {
+        "path": "docs/product/ai_coach_functional_audit_and_roadmap_v7.1.md",
+        "description": "Функциональный обзор, критический анализ и дорожная карта AI Тренера v7.1+"
+      }
+    ]
+  },
+
+  "architecture_decisions": {
+    "auto_discover": true,
+    "adr_file": ".agent_context/ARCHITECTURE_DECISIONS.md",
+    "adr_pattern": "## ADR (\\d+):",
+    "min_adr_count": 9,
+    "_note": "ADR 009 added for MAS 3-layer architecture decision"
+  },
+
+  "agents": {
+    "auto_discover": true,
+    "swarm_state_file": ".agent_context/SWARM_STATE.md",
+    "agents_dir": ".agent_context/agents",
+    "agent_name_pattern": "`([a-z][a-z0-9_]+)`",
+    "explicit_required": [
+      "orchestrator_engine", "blackboard_manager", "human_escalation_handler",
+      "security_policy_keeper", "legal_compliance_policy_keeper",
+      "finance_budget_policy_keeper", "product_ux_policy_keeper",
+      "engineering_lead", "medical_team_lead", "growth_team_lead",
+      "research_team_lead", "economics_team_lead", "legal_ops_team_lead",
+      "backend_integrator", "qa_safety_auditor", "devops_infra",
+      "sports_ai_engineer", "observability_sre_monitoring"
+    ],
+    "_note": "As-Is legacy agents (cfo_financial_strategist, cybersecurity_penetration_tester, etc.) kept as archived state files — auto_discover will find them from SWARM_STATE legacy section",
+    "deprecated_excluded": [
+      "product_saas_architect",
+      "ip_trademark_counsel",
+      "cloud_finops_cost_engineer"
+    ]
+  },
+
+  "swarm_state_sync": {
+    "file": ".agent_context/SWARM_STATE.md",
+    "test_count_pattern": "(\\d+)/(\\d+)\\s+Pytest",
+    "description": "Счётчик тестов в SWARM_STATE.md должен совпадать с реальным pytest"
+  },
+
+  "custom_checks": [
+    {
+      "id": "CC-001",
+      "description": "152-ФЗ: AES-256-GCM ключ не должен быть хардкодирован в коде",
+      "type": "file_no_pattern",
+      "files": ["app/core/security.py", "app/core/config.py"],
+      "forbidden_patterns": ["= b'[A-Za-z0-9+/]{43}='", "AES_KEY\\s*=\\s*['\"]"],
+      "severity": "FAIL"
+    },
+    {
+      "id": "CC-002",
+      "description": "Gemini API ключ не должен быть хардкодирован (начинается с AIza)",
+      "type": "project_no_pattern",
+      "dirs": ["app"],
+      "forbidden_patterns": ["AIzaSy[A-Za-z0-9_-]{33}"],
+      "severity": "FAIL"
+    },
+    {
+      "id": "CC-003",
+      "description": "Все тестовые файлы должны следовать соглашению test_*.py (кроме __init__.py)",
+      "type": "directory_naming",
+      "dir": "tests",
+      "pattern": "(test_.*\\.py|__init__\\.py|conftest\\.py)",
+      "severity": "WARN"
+    },
+    {
+      "id": "CC-004",
+      "description": "pytest.ini или pyproject.toml должны присутствовать",
+      "type": "file_exists_any",
+      "files": ["pytest.ini", "pyproject.toml", "setup.cfg"],
+      "severity": "FAIL"
+    },
+    {
+      "id": "CC-005",
+      "description": ".env.example должен присутствовать (документация переменных)",
+      "type": "file_exists",
+      "path": ".env.example",
+      "severity": "WARN"
+    },
+    {
+      "id": "CC-006",
+      "description": "Dockerfile должен использовать non-root пользователя",
+      "type": "file_contains_pattern",
+      "file": "Dockerfile",
+      "required_patterns": ["USER\\s+\\w+"],
+      "severity": "WARN"
+    },
+    {
+      "id": "CC-007",
+      "description": "agents_config.json должен содержать все 4 Policy Keepers и Оркестратор",
+      "type": "file_contains_pattern",
+      "file": "agents_config.json",
+      "required_patterns": ["security_policy_keeper", "legal_compliance_policy_keeper", "orchestrator_engine", "arbitration"],
+      "severity": "FAIL"
+    }
+  ]
+}

@@ -446,6 +446,26 @@ def check_source_files(r: Reporter, manifest: dict, total: int, idx: int):
         else:
             r.ok(f"{entry['path']}  ({size:,} b)  {DIM}{desc}{RESET}")
 
+    # Entrypoint Execution Safety Check (CLI / Docker runner check)
+    entrypoints = [
+        ("app/telegram_bot/bot.py", ["if __name__ ==", "__main__", "asyncio.run"]),
+        ("orchestrator/orchestrator.py", ["if __name__ ==", "__main__"]),
+        ("scripts/validate_governance.py", ["if __name__ ==", "__main__"]),
+    ]
+    r.subsection("Проверка исполняемости скриптов-точек входа (Entrypoint Execution Safety)")
+    for rel_path, required_tokens in entrypoints:
+        file_path = BASE_DIR / rel_path
+        if not file_path.exists():
+            r.fail(f"Точка входа {rel_path} — НЕ НАЙДЕНА")
+            continue
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+        missing = [t for t in required_tokens if t not in content]
+        if missing:
+            r.fail(f"Точка входа {rel_path} не содержит слушателя 'if __name__ == \"__main__\":' (отсутствует {missing})!")
+        else:
+            r.ok(f"Точка входа {rel_path} содержит слушатель runner [{', '.join(required_tokens[:2])}]")
+
+
 
 # ============================================================
 # 7. PYTEST: ДИНАМИЧЕСКОЕ ЧИСЛО ТЕСТОВ

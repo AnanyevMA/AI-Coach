@@ -32,7 +32,7 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/home/appuser/.local/bin:${PATH}" \
+    PATH="/usr/local/bin:${PATH}" \
     PYTHONPATH="/app"
 
 # Install runtime dependencies (libpq5 for asyncpg/psycopg, curl for healthcheck)
@@ -50,8 +50,8 @@ RUN groupadd -g 10001 appgroup && \
 COPY --from=builder /build/wheels /tmp/wheels
 COPY --from=builder /build/requirements.txt .
 
-# Install dependencies as appuser
-RUN pip install --no-cache-dir --user /tmp/wheels/* && \
+# Install dependencies system-wide so non-root appuser can access executables
+RUN pip install --no-cache-dir /tmp/wheels/* && \
     rm -rf /tmp/wheels
 
 # Copy application source code and migrations

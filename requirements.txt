@@ -26,8 +26,9 @@ pydantic>=2.7.1,<2.8.0
 pydantic-settings>=2.2.1,<2.3.0
 python-dotenv>=1.0.1,<1.1.0
 
-# HTTP Client (Async integrations with Selectel/Yandex Cloud APIs & AI providers)
+# HTTP Client & Telegram Bot API
 httpx>=0.27.0,<0.28.0
+aiogram>=3.6.0,<3.10.0
 
 # Form Data & File Uploads (Telemetric .FIT file ingestion)
 python-multipart>=0.0.9,<0.1.0

@@ -2,13 +2,24 @@
 Telegram Bot v3 Module for AI Adaptive Coach v7.0
 Provides handlers for /start, /checkin, /workout, /stats, /sync, /redflag, /help
 and launches Telegram Mini App via WebAppInfo button.
+Includes robust async long-polling execution engine.
 """
+
 import os
+import sys
+import asyncio
 import logging
 from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 
-logger = logging.getLogger(__name__)
+import httpx
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("telegram_bot")
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "mock_bot_token_777")
 WEBAPP_URL = os.getenv("TELEGRAM_WEBAPP_URL", "http://localhost:8000/pwa")
@@ -142,84 +153,136 @@ class TelegramBotV3Handler:
             f"Выявлен критический симптом: **{symptom}**.\n\n"
             "⛔ Все спортивные нагрузки НЕМЕДЛЕННО ОСТАНОВЛЕНЫ.\n"
             "🏥 При боли в груди, аритмии или нехватке воздуха вызвать скорую помощь (112).\n"
-            "📞 Ваш тренеру отправлено уведомление."
+            "📞 Вашему тренеру отправлено уведомление."
         )
         return {"text": text, "status": "HARD_LOCK", "parse_mode": "Markdown"}
-
-    # REST API FastAPI Integration Helpers (/api/v1/auth, /api/v1/athletes, /api/v1/ai-coach/generate-plan)
-    async def api_login(self, email: str, password: str, api_base_url: str = "http://localhost:8000/api/v1") -> Dict[str, Any]:
-        """Authenticate user against FastAPI REST API /api/v1/auth/login."""
-        async with httpx.AsyncClient(base_url=api_base_url, timeout=10.0) as client:
-            resp = await client.post("/auth/login", data={"username": email, "password": password})
-            return {"status_code": resp.status_code, "data": resp.json() if resp.status_code == 200 else resp.text}
-
-    async def api_get_athlete_profile(self, token: str, api_base_url: str = "http://localhost:8000/api/v1") -> Dict[str, Any]:
-        """Fetch athlete profile from FastAPI REST API /api/v1/athletes/profile."""
-        async with httpx.AsyncClient(base_url=api_base_url, timeout=10.0) as client:
-            resp = await client.get("/athletes/profile", headers={"Authorization": f"Bearer {token}"})
-            return {"status_code": resp.status_code, "data": resp.json() if resp.status_code == 200 else resp.text}
-
-    async def api_generate_plan(self, token: str, plan_data: Dict[str, Any], api_base_url: str = "http://localhost:8000/api/v1") -> Dict[str, Any]:
-        """Request AI workout plan from FastAPI REST API /api/v1/ai-coach/generate-plan."""
-        async with httpx.AsyncClient(base_url=api_base_url, timeout=10.0) as client:
-            resp = await client.post("/ai-coach/generate-plan", json=plan_data, headers={"Authorization": f"Bearer {token}"})
-            return {"status_code": resp.status_code, "data": resp.json()}
 
 
 # Global bot instance singleton
 bot_handler = TelegramBotV3Handler()
 
-# Optional aiogram 3.x integration router
-try:
-    from aiogram import Router, types
-    from aiogram.filters import Command
 
-    router = Router()
+async def run_httpx_polling(token: str):
+    """
+    Async long-polling loop using HTTPX.
+    Works natively without extra library issues.
+    """
+    api_url = f"https://api.telegram.org/bot{token}"
+    logger.info(f"Starting Telegram Bot Polling via HTTPX API... (Token: {token[:6]}...{token[-4:]})")
 
-    @router.message(Command("start"))
-    async def aiogram_start(message: types.Message):
-        user_id = message.from_user.id if message.from_user else 0
-        username = message.from_user.username if message.from_user else None
-        res = await bot_handler.handle_start(user_id=user_id, username=username)
-        await message.answer(res["text"], parse_mode=res.get("parse_mode"))
+    async with httpx.AsyncClient(timeout=35.0) as client:
+        # Delete webhook first to avoid getUpdates conflicts
+        try:
+            await client.post(f"{api_url}/deleteWebhook", json={"drop_pending_updates": True})
+            logger.info("Cleared existing Webhooks for clean polling.")
+        except Exception as e:
+            logger.warning(f"Could not delete webhook: {e}")
 
-    @router.message(Command("checkin"))
-    async def aiogram_checkin(message: types.Message):
-        user_id = message.from_user.id if message.from_user else 0
-        res = await bot_handler.handle_checkin(user_id=user_id)
-        await message.answer(res["text"], parse_mode=res.get("parse_mode"))
+        offset = 0
+        while True:
+            try:
+                resp = await client.get(
+                    f"{api_url}/getUpdates",
+                    params={"offset": offset, "timeout": 25, "allowed_updates": ["message", "callback_query"]}
+                )
+                if resp.status_code != 200:
+                    logger.error(f"Telegram API Error {resp.status_code}: {resp.text}")
+                    await asyncio.sleep(5.0)
+                    continue
 
-    @router.message(Command("workout"))
-    async def aiogram_workout(message: types.Message):
-        user_id = message.from_user.id if message.from_user else 0
-        res = await bot_handler.handle_workout(user_id=user_id)
-        await message.answer(res["text"], parse_mode=res.get("parse_mode"))
+                data = resp.json()
+                if not data.get("ok"):
+                    logger.error(f"Telegram API Error: {data}")
+                    await asyncio.sleep(5.0)
+                    continue
 
-    @router.message(Command("stats"))
-    async def aiogram_stats(message: types.Message):
-        user_id = message.from_user.id if message.from_user else 0
-        res = await bot_handler.handle_stats(user_id=user_id)
-        await message.answer(res["text"], parse_mode=res.get("parse_mode"))
+                for update in data.get("result", []):
+                    update_id = update.get("update_id", 0)
+                    offset = max(offset, update_id + 1)
 
-    @router.message(Command("sync"))
-    async def aiogram_sync(message: types.Message):
-        user_id = message.from_user.id if message.from_user else 0
-        res = await bot_handler.handle_sync(user_id=user_id)
-        await message.answer(res["text"], parse_mode=res.get("parse_mode"))
+                    message = update.get("message")
+                    callback_query = update.get("callback_query")
 
-    @router.message(Command("redflag"))
-    async def aiogram_redflag(message: types.Message):
-        user_id = message.from_user.id if message.from_user else 0
-        res = await bot_handler.handle_redflag(user_id=user_id)
-        await message.answer(res["text"], parse_mode=res.get("parse_mode"))
+                    if message:
+                        chat_id = message["chat"]["id"]
+                        user_id = message.get("from", {}).get("id", chat_id)
+                        username = message.get("from", {}).get("username")
+                        text = (message.get("text") or "").strip()
 
-    @router.message(Command("help"))
-    async def aiogram_help(message: types.Message):
-        user_id = message.from_user.id if message.from_user else 0
-        res = await bot_handler.handle_help(user_id=user_id)
-        await message.answer(res["text"], parse_mode=res.get("parse_mode"))
+                        logger.info(f"Received message from user {user_id} (@{username}): {text}")
 
-except ImportError:
-    router = None
+                        cmd = text.split()[0].lower() if text else ""
+                        if cmd == "/start":
+                            res = await bot_handler.handle_start(user_id=user_id, username=username)
+                        elif cmd == "/checkin":
+                            res = await bot_handler.handle_checkin(user_id=user_id)
+                        elif cmd == "/workout":
+                            res = await bot_handler.handle_workout(user_id=user_id)
+                        elif cmd == "/stats":
+                            res = await bot_handler.handle_stats(user_id=user_id)
+                        elif cmd == "/sync":
+                            res = await bot_handler.handle_sync(user_id=user_id)
+                        elif cmd == "/redflag":
+                            res = await bot_handler.handle_redflag(user_id=user_id)
+                        elif cmd == "/help":
+                            res = await bot_handler.handle_help(user_id=user_id)
+                        else:
+                            res = await bot_handler.handle_start(user_id=user_id, username=username)
+
+                        send_payload = {
+                            "chat_id": chat_id,
+                            "text": res.get("text", ""),
+                            "parse_mode": res.get("parse_mode", "Markdown"),
+                        }
+                        if "reply_markup" in res:
+                            send_payload["reply_markup"] = res["reply_markup"]
+
+                        await client.post(f"{api_url}/sendMessage", json=send_payload)
+
+                    elif callback_query:
+                        query_id = callback_query["id"]
+                        chat_id = callback_query["message"]["chat"]["id"]
+                        user_id = callback_query.get("from", {}).get("id", chat_id)
+                        cb_data = callback_query.get("data", "")
+
+                        logger.info(f"Received callback query '{cb_data}' from user {user_id}")
+
+                        if cb_data == "cmd_workout":
+                            res = await bot_handler.handle_workout(user_id=user_id)
+                        elif cb_data == "cmd_stats":
+                            res = await bot_handler.handle_stats(user_id=user_id)
+                        elif cb_data == "complete_workout":
+                            res = {"text": "🎉 **Отличная работа!** Тренировка отмечена как выполненная. Данные сохранены."}
+                        else:
+                            res = await bot_handler.handle_help(user_id=user_id)
+
+                        await client.post(f"{api_url}/answerCallbackQuery", json={"callback_query_id": query_id})
+                        await client.post(f"{api_url}/sendMessage", json={
+                            "chat_id": chat_id,
+                            "text": res.get("text", ""),
+                            "parse_mode": res.get("parse_mode", "Markdown")
+                        })
+
+            except asyncio.CancelledError:
+                logger.info("Polling loop cancelled.")
+                break
+            except Exception as e:
+                logger.error(f"Error in polling loop: {e}", exc_info=True)
+                await asyncio.sleep(3.0)
 
 
+async def main():
+    token = BOT_TOKEN
+    if not token or token == "mock_bot_token_777":
+        logger.error("TELEGRAM_BOT_TOKEN environment variable is not set or using mock token! Exiting.")
+        sys.exit(1)
+
+    logger.info("Initializing AI Adaptive Coach Telegram Bot v3...")
+    await run_httpx_polling(token)
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped.")

@@ -78,7 +78,7 @@ class TestTelegramBotSuite:
         assert "text" in res
         assert "alexey_runner" in res["text"]
         assert "323-ФЗ" in res["text"]  # Medical disclaimer check
-        assert "AI Adaptive Coach v7.0" in res["text"]
+        assert "AI Adaptive Coach v7." in res["text"]
         assert res["status"] == "success"
 
         # Verify inline keyboard with WebAppInfo

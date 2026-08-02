@@ -6,7 +6,9 @@ from app.api.v1.endpoints import (
     auth,
     coaches,
     health,
+    notifications,
     red_flags,
+    strava,
     telegram,
     telemetry,
     webhooks,
@@ -25,4 +27,7 @@ api_router.include_router(red_flags.router, prefix="/red-flags", tags=["red-flag
 api_router.include_router(ai_coach.router, prefix="/ai-coach", tags=["ai-coach"])
 api_router.include_router(telegram.router, prefix="/telegram", tags=["telegram"])
 api_router.include_router(webhooks.router, tags=["webhooks"])
+api_router.include_router(strava.router, prefix="/strava", tags=["strava"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func, BigInteger, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -52,13 +52,25 @@ class Activity(Base):
     max_hr: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_elevation_gain: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     fit_file_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    
+
+    # ── Источник и Strava ─────────────────────────────────────────────
+    # Источник тренировки: manual / strava / garmin / fit_upload
+    source: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)
+    # Уникальный ID тренировки в Strava (защита от дублирования)
+    strava_activity_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
+    # Время загрузки из Strava API (задержка 1 час после окончания)
+    strava_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     # Relationships
     athlete: Mapped["AthleteProfile"] = relationship("AthleteProfile", back_populates="activities")
+
+    __table_args__ = (
+        UniqueConstraint("athlete_id", "strava_activity_id", name="uq_activity_strava_id"),
+    )
 
 
 class HRVData(Base):

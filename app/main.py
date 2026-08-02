@@ -24,7 +24,8 @@ from prometheus_client import (
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import engine, AsyncSessionLocal
+from app.services.notification_scheduler import notification_scheduler
 
 # Setup Logging
 logging.basicConfig(
@@ -106,15 +107,22 @@ async def lifespan(app: FastAPI):
     Application Lifespan Context Manager.
     Initializes database tables and resources on startup.
     """
-    logger.info("Initializing AI Adaptive Coach v7.0 Async Backend...")
+    logger.info("Initializing AI Adaptive Coach v7.1 Async Backend...")
     async with engine.begin() as conn:
         # Create tables automatically for dev/sqlite environments if missing
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database schema initialized successfully.")
-    
+
+    # Запускаем планировщик push-уведомлений
+    notification_scheduler.set_db_factory(AsyncSessionLocal)
+    notification_scheduler.start()
+    logger.info("NotificationScheduler запущен (morning_checkin sweep + weekly_summary).")
+
     yield
-    
-    logger.info("Shutting down AI Adaptive Coach v7.0 Backend...")
+
+    # Останавливаем планировщик при завершении
+    notification_scheduler.stop()
+    logger.info("Shutting down AI Adaptive Coach v7.1 Backend...")
     await engine.dispose()
 
 

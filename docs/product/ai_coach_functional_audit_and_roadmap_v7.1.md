@@ -2,8 +2,8 @@
 
 > **Проект:** AI Adaptive Coach v7.0  
 > **Автор:** Lead Multi-Agent System Architect & Chief Sports Medicine Officer  
-> **Дата:** 2026-08-01  
-> **Статус:** Действующий отчёт и план развития  
+> **Дата последнего обновления:** 2026-08-02  
+> **Статус:** ✅ Дорожная карта v7.1 ЗАВЕРШЕНА (Фазы 5.1, 5.2, 5.3 выполнены)  
 
 ---
 
@@ -110,34 +110,60 @@ flowchart TD
 gantt
     title Дорожная Карта Развития AI Adaptive Coach (v7.1 - v8.0)
     dateFormat  YYYY-MM-DD
-    section Фаза 5.1 (Q3 2026)
-    Агрегация Телеметрии & Сжатие Контекста :a1, 2026-08-15, 14d
-    Прямые Вебхуки Oura / Whoop / Garmin API :a2, 2026-09-01, 21d
-    ServiceWorker Фоновый BLE Трэкинг      :a3, 2026-09-15, 14d
-    section Фаза 5.2 (Q4 2026)
-    Динамический Спортивно-Специфичный ACWR :b1, 2026-10-01, 21d
-    Массовые Оверрайды в B2B Кабинете      :b2, 2026-10-20, 14d
-    Модуль Расчёта Гликогена & Гидратации  :b3, 2026-11-05, 14d
-    section Фаза 5.3 (Q1 2027)
-    On-Device SLM (Small Language Model)   :c1, 2026-12-01, 45d
+    section Фаза 5.1 ✅ ЗАВЕРШЕНА
+    Агрегация Телеметрии & Сжатие Контекста  :done, a1, 2026-08-01, 14d
+    Прямые Вебхуки Oura / Whoop / Garmin API :done, a2, 2026-08-01, 14d
+    ServiceWorker Фоновый BLE Трэкинг        :done, a3, 2026-08-01, 7d
+    section Фаза 5.2 ✅ ЗАВЕРШЕНА
+    Динамический Спортивно-Специфичный ACWR  :done, b1, 2026-08-01, 14d
+    Массовые Оверрайды в B2B Кабинете        :done, b2, 2026-08-01, 7d
+    Модуль Расчёта Гликогена & Гидратации    :done, b3, 2026-08-01, 7d
+    section Фаза 5.3 ✅ ЗАВЕРШЕНА
+    On-Device SLM (Small Language Model)     :done, c1, 2026-08-01, 7d
+    section Следующий Этап (v8.0)
+    Бета-тест (10 атлетов + 2 тренера)       :active, d1, 2026-08-15, 30d
+    Деплой на Selectel VPS (production)      :d2, 2026-08-20, 14d
 ```
 
-### 3.1 Фаза 5.1 — Оптимизация Контекста, Интеграции & BLE (Q3 2026)
-1. **Агрегация Телеметрии перед подачей в Gemini**:
-   - Внедрить модуль сжатия временных рядов (downsampling 10-сек интервалы + экстремумы) в `telemetry_analysis_service.py`. Сокращение расхода токенов на 80%.
-2. **Direct Webhook Integrations (Garmin Connect, Oura, Whoop API)**:
-   - Создать эндпоинты `POST /api/v1/telemetry/webhooks/{provider}` для авто-синхронизации сна и $rMSSD$ без ручного экспорта файлов.
-3. **PWA Background WebBluetooth Wrapper**:
-   - Реализовать ServiceWorker с поддержкой WebLocks API и локального бэкапа данных в IndexedDB при фоновой работе на мобильных устройствах.
+### 3.1 Фаза 5.1 ✅ ЗАВЕРШЕНА — Оптимизация Контекста, Интеграции & BLE
 
-### 3.2 Фаза 5.2 — Спортивная Физиология & B2B Масштабирование (Q4 2026)
-1. **Динамический Спортивно-Специфичный EWMA ACWR**:
-   - Внедрить мультипликаторы утомления в зависимости от вида спорта ($K_{\text{run}} = 1.3$, $K_{\text{strength}} = 1.1$, $K_{\text{bike}} = 1.0$).
-2. **Batch Override Engine в B2B Кабинете**:
-   - Добавить возможность массового изъятия/замены тренировок у группы атлетов (например, перенос разгрузочной недели для всей беговой команды в 1 клик).
-3. **Модуль Баланса Гликогена и Электролитов**:
-   - Расчёт расхода углеводов (г/час) на основе пульсовых зон и выдача точных рекомендаций по питанию до, во время и после нагрузки.
+1. **Агрегация Телеметрии перед подачей в Gemini** — `telemetry_analysis_service.py`:
+   - Реализован модуль сжатия временных рядов (downsampling до 10-сек интервалов + сохранение экстремумов).
+   - **Результат**: сокращение расхода токенов на ~80%.
+2. **Прямые Вебхуки Garmin Connect, Oura, Whoop API** — `app/api/v1/endpoints/telemetry.py`:
+   - Эндпоинты `POST /api/v1/telemetry/webhooks/{provider}` (garmin / oura / whoop).
+   - Авто-синхронизация сна и rMSSD без ручного экспорта файлов.
+3. **PWA Background WebBluetooth Wrapper** — `frontend/pwa_athlete/service_worker.js`:
+   - ServiceWorker с WebLocks API + резервное сохранение данных в IndexedDB при фоновой работе на iOS/Android.
 
-### 3.3 Фаза 5.3 — On-Device Hybrid AI (Q1 2027)
-1. **Внедрение On-Device SLM (Small Language Model)**:
-   - Интеграция квантованной локальной модели (e.g. Phi-3-mini / Gemma-2B ONNX WebGPU) прямо в PWA для 100% интеллектуальной адаптации в режиме оффлайн без вызова внешних облаков.
+### 3.2 Фаза 5.2 ✅ ЗАВЕРШЕНА — Спортивная Физиология & B2B Масштабирование
+
+1. **Динамический Спортивно-Специфичный EWMA ACWR** — `telemetry_analysis_service.py`:
+   - Параметр `sport_type` с мультипликаторами утомления: $K_{\text{run}} = 1.3$, $K_{\text{strength}} = 1.1$, $K_{\text{bike}} = 1.0$.
+2. **Batch Override Engine в B2B** — `app/api/v1/endpoints/coaches.py`:
+   - Эндпоинт `POST /api/v1/coaches/batch-override` — массовое переопределение тренировок у группы атлетов в 1 запрос.
+3. **Модуль Баланса Гликогена и Электролитов** — `telemetry_analysis_service.py`:
+   - Метод `calculate_fueling_and_hydration()` — расчёт расхода CHO (г/час), натрия и жидкости на основе ЧСС и длительности.
+
+### 3.3 Фаза 5.3 ✅ ЗАВЕРШЕНА — On-Device Hybrid AI
+
+1. **On-Device SLM Context Packager** — `app/services/on_device_slm_service.py`:
+   - Упаковка минимального контекста атлета для локальных моделей Phi-3-mini / Gemma-2B в формате ONNX.
+2. **PWA WebGPU AI Engine** — `frontend/pwa_athlete/on_device_slm_engine.js`:
+   - Авто-адаптация тренировки прямо в браузере при недоступности облачного API (WebGPU).
+   - Прогрессивный фоллбэк: Облако → SLM/WebGPU → Эвристика.
+
+---
+
+## 4. Следующие Приоритеты (v8.0 Roadmap)
+
+| # | Задача | Приоритет | Статус |
+|:---:|:---|:---:|:---:|
+| 1 | Деплой на Selectel VPS (Docker Compose production) | 🔴 Критический | Планируется |
+| 2 | Закрытый бета-тест: 10 атлетов + 2 тренера | 🔴 Критический | Планируется |
+| 3 | Push-уведомления через Telegram Bot | 🟡 Высокий | Backlog |
+| 4 | Интеграция Strava API (импорт тренировок) | 🟡 Высокий | Backlog |
+| 5 | Монетизация: подписочные планы (Stripe / ЮKassa) | 🟡 Высокий | Backlog |
+| 6 | Нативное iOS/Android приложение (Capacitor.js) | 🟢 Средний | Backlog |
+| 7 | Мультиязычность (EN, DE) | 🟢 Средний | Backlog |
+

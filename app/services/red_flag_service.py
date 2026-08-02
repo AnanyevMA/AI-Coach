@@ -253,7 +253,61 @@ class RedFlagService:
 
         await db.commit()
         await db.refresh(log_entry)
+
+        # ── Push-уведомление атлету при Red Flag Level 1 / 2 ────────────
+        # Отправляем синхронно внутри триажа (P1 Medical: not async, not deferred)
+        if triage.level in (self.LEVEL_1_EMERGENCY, self.LEVEL_2_MEDICAL):
+            await self._send_red_flag_notification(db, athlete_id, triage)
+
         return log_entry
+
+    async def _send_red_flag_notification(
+        self,
+        db: AsyncSession,
+        athlete_id: int,
+        triage: TriageResult,
+    ):
+        """
+        Отправляет Telegram уведомление атлету при срабатывании Level 1 / 2.
+        Импортируем notification_service внутри метода (избегаем circular import).
+        """
+        import logging
+        _logger = logging.getLogger("red_flag_service")
+        try:
+            from app.services.notification_service import notification_service
+
+            # Получаем AthleteProfile для получения chat_id
+            athlete_res = await db.execute(
+                select(AthleteProfile).where(AthleteProfile.id == athlete_id)
+            )
+            athlete = athlete_res.scalar_one_or_none()
+            if not athlete:
+                return
+
+            # Проверяем opt-in на Red Flag уведомления
+            if not athlete.notify_red_flag:
+                return
+
+            if not athlete.telegram_chat_id_encrypted:
+                _logger.debug(f"Red Flag: атлет {athlete_id} не привязал Telegram")
+                return
+
+            chat_id = notification_service.decrypt_chat_id(athlete.telegram_chat_id_encrypted)
+            if chat_id is None:
+                return
+
+            await notification_service.send_red_flag_alert(
+                chat_id=chat_id,
+                level=triage.level or "",
+                trigger_condition=triage.trigger_condition or "",
+                is_athlete=True,
+            )
+            _logger.info(f"Red Flag уведомление отправлено: athlete_id={athlete_id}, level={triage.level}")
+        except Exception as exc:
+            import logging
+            logging.getLogger("red_flag_service").error(
+                f"Red Flag notification error: {exc}", exc_info=True
+            )
 
 
 red_flag_service = RedFlagService()

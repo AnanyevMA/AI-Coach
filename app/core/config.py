@@ -36,6 +36,22 @@ class Settings(BaseSettings):
 
     # Telegram Integration
     TELEGRAM_BOT_TOKEN: Optional[str] = None
+    TELEGRAM_WEBAPP_URL: Optional[str] = Field(
+        default_factory=lambda: os.getenv("TELEGRAM_WEBAPP_URL", "http://localhost:8000/pwa")
+    )
+
+    # Strava OAuth Integration
+    STRAVA_CLIENT_ID: Optional[str] = Field(default_factory=lambda: os.getenv("STRAVA_CLIENT_ID"))
+    STRAVA_CLIENT_SECRET: Optional[str] = Field(default_factory=lambda: os.getenv("STRAVA_CLIENT_SECRET"))
+    STRAVA_REDIRECT_URI: str = Field(
+        default_factory=lambda: os.getenv("STRAVA_REDIRECT_URI", "http://localhost:8000/api/v1/strava/callback")
+    )
+    # Случайный токен для верификации подписки webhook (должен быть задан в .env)
+    STRAVA_WEBHOOK_VERIFY_TOKEN: str = Field(
+        default_factory=lambda: os.getenv("STRAVA_WEBHOOK_VERIFY_TOKEN", "ai_coach_strava_webhook_token")
+    )
+    # Задержка перед загрузкой тренировки из Strava (1 час) — даёт время на корректировки
+    STRAVA_FETCH_DELAY_SECONDS: int = 3600  # 1 час
 
     # Sentry & Observability Integration
     ENVIRONMENT: str = Field(default_factory=lambda: os.getenv("ENVIRONMENT", "production"))

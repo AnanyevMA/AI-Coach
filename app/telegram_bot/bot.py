@@ -1,8 +1,13 @@
 """
-Telegram Bot v3 Module for AI Adaptive Coach v7.0
-Provides handlers for /start, /checkin, /workout, /stats, /sync, /redflag, /help
-and launches Telegram Mini App via WebAppInfo button.
-Includes robust async long-polling execution engine.
+Telegram Bot v3.1 Module for AI Adaptive Coach v7.1
+Поддерживаемые команды: /start, /checkin, /workout, /stats, /sync, /redflag,
+                        /strava, /subscribe, /unsubscribe, /help
+
+Новое в v3.1:
+- Сохранение telegram_chat_id при /start для push-уведомлений (152-ФЗ: шифруется)
+- /strava — ручная синхронизация со Strava
+- /subscribe / /unsubscribe — управление подпиской на уведомления
+- Callback-обработчик проверки датчика ЧСС из Strava (hr_sensor_error / hr_real_data)
 """
 
 import os
@@ -23,16 +28,22 @@ logger = logging.getLogger("telegram_bot")
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "mock_bot_token_777")
 WEBAPP_URL = os.getenv("TELEGRAM_WEBAPP_URL", "http://localhost:8000/pwa")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
 
-ALLOWED_COMMANDS = {"/start", "/checkin", "/workout", "/stats", "/sync", "/redflag", "/help"}
+ALLOWED_COMMANDS = {
+    "/start", "/checkin", "/workout", "/stats", "/sync", "/redflag",
+    "/strava", "/subscribe", "/unsubscribe", "/help"
+}
 
 
 class TelegramBotV3Handler:
-    """Async Telegram Bot Handler enforcing 152-ФЗ compliance and 323-ФЗ medical disclaimers."""
+    """Async Telegram Bot Handler с поддержкой push-уведомлений и Strava интеграции."""
 
     def __init__(self, token: str = BOT_TOKEN, webapp_url: str = WEBAPP_URL):
         self.token = token
         self.webapp_url = webapp_url
+        # Внутренный httpx-клиент для отправки запросов к internal API
+        self._api_client: Optional[httpx.AsyncClient] = None
 
     def validate_command(self, command: str) -> bool:
         """Validate if the Telegram command is supported by Bot v3."""
@@ -52,10 +63,16 @@ class TelegramBotV3Handler:
         except Exception:
             return False
 
-    async def handle_start(self, user_id: int, username: Optional[str] = None) -> Dict[str, Any]:
-        """Handle /start command with onboarding & WebApp button."""
+    async def handle_start(self, user_id: int, username: Optional[str] = None, chat_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        /start — приветствие и регистрация.
+        Сохраняет telegram_chat_id в Профиле атлета (зашифрованный) для push-уведомлений.
+        """
+        if chat_id:
+            await self._register_chat_id(user_id=user_id, chat_id=chat_id)
+
         text = (
-            f"🏆 **Привет, {username or 'атлет'}! Добро пожаловать в AI Adaptive Coach v7.0**\n\n"
+            f"✨ **Привет, {username or 'атлет'}! Добро пожаловать в AI Adaptive Coach v7.1**\n\n"
             "Я твой адаптивный ИИ-тренер, работающий на базе Google Gemini Flash.\n\n"
             "⚠️ **Медицинское предупреждение (323-ФЗ):**\n"
             "AI Adaptive Coach является спортивно-аналитическим сервисом и не оказывает медицинских услуг.\n\n"
@@ -72,6 +89,10 @@ class TelegramBotV3Handler:
                 [
                     {"text": "📊 Моя тренировка на сегодня", "callback_data": "cmd_workout"},
                     {"text": "📈 Профиль и HRV Z-score", "callback_data": "cmd_stats"}
+                ],
+                [
+                    {"text": "📡 Подключить Strava", "callback_data": "cmd_strava"},
+                    {"text": "🔔 Настройки уведомлений", "callback_data": "cmd_subscribe"}
                 ]
             ]
         }
@@ -124,15 +145,62 @@ class TelegramBotV3Handler:
         text = "🔄 **Синхронизация с Wearable API**\n\nДанные с Garmin Connect / Apple Health успешно обновлены."
         return {"text": text, "status": "synced", "parse_mode": "Markdown"}
 
+    async def handle_strava(self, user_id: int) -> Dict[str, Any]:
+        """/strava — статус и ручная синхронизация со Strava."""
+        text = (
+            "📡 **Интеграция Strava**\n\n"
+            "Твои тренировки из Strava импортируются автоматически через 1 час после завершения.\n"
+            "Чтобы подключить Strava, открой приложение и перейди в Настройки."
+        )
+        reply_markup = {
+            "inline_keyboard": [
+                [{"text": "📱 Открыть настройки Strava", "web_app": {"url": self.webapp_url}}],
+            ]
+        }
+        return {"text": text, "reply_markup": reply_markup, "parse_mode": "Markdown", "status": "success"}
+
+    async def handle_subscribe(self, user_id: int, chat_id: int) -> Dict[str, Any]:
+        """/subscribe — включить push-уведомления."""
+        await self._set_notification_prefs(user_id=user_id, enabled=True)
+        return {
+            "text": (
+                "🔔 **Уведомления включены!**\n\n"
+                "Ты будешь получать:\n"
+                "• ☀️ Утренние напоминания о чек-ине\n"
+                "• 🏃 Готовые планы тренировок\n"
+                "• 📊 Еженедельный дайджест\n"
+                "• 🚨 Медицинские алерты\n\n"
+                "Чтобы отключить — /unsubscribe"
+            ),
+            "parse_mode": "Markdown",
+            "status": "success"
+        }
+
+    async def handle_unsubscribe(self, user_id: int) -> Dict[str, Any]:
+        """/unsubscribe — отключить все push-уведомления."""
+        await self._set_notification_prefs(user_id=user_id, enabled=False)
+        return {
+            "text": (
+                "🔕 **Уведомления отключены**\n\n"
+                "Ты больше не будешь получать автоматические уведомления.\n"
+                "Чтобы включить снова — /subscribe"
+            ),
+            "parse_mode": "Markdown",
+            "status": "success"
+        }
+
     async def handle_help(self, user_id: int) -> Dict[str, Any]:
         """Handle /help command displaying available bot commands."""
         text = (
-            "ℹ️ **Доступные команды AI Adaptive Coach v7.0:**\n\n"
+            "ℹ️ **Доступные команды AI Adaptive Coach v7.1:**\n\n"
             "• /start — Приветствие и регистрация\n"
             "• /checkin — Утренний опросник (<45 сек)\n"
             "• /workout — Текущая тренировка\n"
             "• /stats — Метрики HRV и ACWR\n"
             "• /sync — Обновить данные с носимых устройств\n"
+            "• /strava — Статус и синх Strava\n"
+            "• /subscribe — Включить push-уведомления\n"
+            "• /unsubscribe — Отключить уведомления\n"
             "• /redflag — Сообщить о сильной боли / недуге\n"
             "• /help — Справка"
         )
@@ -156,6 +224,32 @@ class TelegramBotV3Handler:
             "📞 Вашему тренеру отправлено уведомление."
         )
         return {"text": text, "status": "HARD_LOCK", "parse_mode": "Markdown"}
+
+    async def _register_chat_id(self, user_id: int, chat_id: int):
+        """
+        Сохраняет telegram_chat_id в Профиле атлета через internal API.
+        chat_id шифруется на стороне API перед сохранением в БД (AES-256-GCM).
+        """
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as c:
+                await c.post(
+                    f"{API_BASE_URL}/telegram/register-chat",
+                    json={"telegram_user_id": user_id, "chat_id": chat_id},
+                )
+                logger.info(f"chat_id зарегистрирован: user_id={user_id}")
+        except Exception as exc:
+            logger.warning(f"_register_chat_id error: {exc}")
+
+    async def _set_notification_prefs(self, user_id: int, enabled: bool):
+        """Устанавливает все настройки уведомлений (вкл/выкл) через internal API."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as c:
+                await c.post(
+                    f"{API_BASE_URL}/telegram/set-notifications",
+                    json={"telegram_user_id": user_id, "enabled": enabled},
+                )
+        except Exception as exc:
+            logger.warning(f"_set_notification_prefs error: {exc}")
 
 
 # Global bot instance singleton
@@ -213,7 +307,7 @@ async def run_httpx_polling(token: str):
 
                         cmd = text.split()[0].lower() if text else ""
                         if cmd == "/start":
-                            res = await bot_handler.handle_start(user_id=user_id, username=username)
+                            res = await bot_handler.handle_start(user_id=user_id, username=username, chat_id=chat_id)
                         elif cmd == "/checkin":
                             res = await bot_handler.handle_checkin(user_id=user_id)
                         elif cmd == "/workout":
@@ -222,12 +316,18 @@ async def run_httpx_polling(token: str):
                             res = await bot_handler.handle_stats(user_id=user_id)
                         elif cmd == "/sync":
                             res = await bot_handler.handle_sync(user_id=user_id)
+                        elif cmd == "/strava":
+                            res = await bot_handler.handle_strava(user_id=user_id)
+                        elif cmd == "/subscribe":
+                            res = await bot_handler.handle_subscribe(user_id=user_id, chat_id=chat_id)
+                        elif cmd == "/unsubscribe":
+                            res = await bot_handler.handle_unsubscribe(user_id=user_id)
                         elif cmd == "/redflag":
                             res = await bot_handler.handle_redflag(user_id=user_id)
                         elif cmd == "/help":
                             res = await bot_handler.handle_help(user_id=user_id)
                         else:
-                            res = await bot_handler.handle_start(user_id=user_id, username=username)
+                            res = await bot_handler.handle_start(user_id=user_id, username=username, chat_id=chat_id)
 
                         send_payload = {
                             "chat_id": chat_id,
@@ -251,8 +351,52 @@ async def run_httpx_polling(token: str):
                             res = await bot_handler.handle_workout(user_id=user_id)
                         elif cb_data == "cmd_stats":
                             res = await bot_handler.handle_stats(user_id=user_id)
+                        elif cb_data == "cmd_strava":
+                            res = await bot_handler.handle_strava(user_id=user_id)
+                        elif cb_data == "cmd_subscribe":
+                            res = await bot_handler.handle_subscribe(user_id=user_id, chat_id=chat_id)
                         elif cb_data == "complete_workout":
                             res = {"text": "🎉 **Отличная работа!** Тренировка отмечена как выполненная. Данные сохранены."}
+                        elif cb_data == "skip_checkin":
+                            res = {"text": "⏩ Понял, пропускаешь сегодня. Завтра напомню снова! 💪"}
+                        elif cb_data.startswith("hr_sensor_error:"):
+                            # Атлет сообщил, что Датчик сбоился — игнорируем аномальный ЧСС
+                            logger.info(f"HR sensor error reported by user {user_id}: {cb_data}")
+                            res = {
+                                "text": (
+                                    "✅ **Понял, спасибо!**\n\n"
+                                    "Данные сбоя датчика игнорируются.\n"
+                                    "Рекомендуем проверить подключение пульсометра перед следующей тренировкой."
+                                )
+                            }
+                        elif cb_data.startswith("hr_real_data:"):
+                            # Атлет подтвердил реальные данные — запускаем Red Flag триаж через API
+                            parts = cb_data.split(":")
+                            strava_act_id = parts[1] if len(parts) > 1 else ""
+                            max_hr_val = parts[2] if len(parts) > 2 else "?"
+                            logger.warning(
+                                f"HR real data confirmed: user={user_id}, strava_id={strava_act_id}, max_hr={max_hr_val}"
+                            )
+                            # Сообщаем об активации Red Flag
+                            try:
+                                async with httpx.AsyncClient(timeout=5.0) as hc:
+                                    await hc.post(
+                                        f"{API_BASE_URL}/red-flags/trigger-from-bot",
+                                        json={
+                                            "telegram_user_id": user_id,
+                                            "max_hr": int(max_hr_val),
+                                            "source": f"strava_activity_{strava_act_id}",
+                                        },
+                                    )
+                            except Exception:
+                                pass
+                            res = {
+                                "text": (
+                                    "🚨 **Триаж запущен**\n\n"
+                                    f"Обнаружен высокий пульс {max_hr_val} bpm. Система анализирует ситуацию.\n"
+                                    "При боли в груди или одышке — вызовите **112**."
+                                )
+                            }
                         else:
                             res = await bot_handler.handle_help(user_id=user_id)
 

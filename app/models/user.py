@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING, List, Optional
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Boolean, func
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Boolean, func, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -60,6 +60,25 @@ class AthleteProfile(Base):
     
     # Health PII Encrypted under 152-FZ
     medical_notes_encrypted: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+
+    # ── Telegram Push Notifications (152-FZ: chat_id encrypted) ──────────────
+    # chat_id хранится зашифрованным (AES-256-GCM) как ПДн
+    telegram_chat_id_encrypted: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    # Персональное время утреннего чек-ина (UTC, 0-23 / 0-59)
+    notification_checkin_hour_utc: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+    notification_checkin_minute_utc: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Настройки opt-in/opt-out по типам
+    notify_morning_checkin: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_workout_ready: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_red_flag: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_weekly_summary: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # ── Strava OAuth Integration (tokens encrypted AES-256-GCM) ──────────────
+    strava_athlete_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    strava_access_token_encrypted: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    strava_refresh_token_encrypted: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    strava_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    strava_scope: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
